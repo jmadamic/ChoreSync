@@ -22,10 +22,9 @@ struct SettingsView: View {
 
     // Track counts for the "Data" section.
     @FetchRequest(sortDescriptors: []) private var allChores:         FetchedResults<Chore>
-    @FetchRequest(sortDescriptors: []) private var allCategories:     FetchedResults<Category>
     @FetchRequest(sortDescriptors: []) private var allShoppingItems:  FetchedResults<ShoppingItem>
 
-    // Confirmation for "Delete All" action.
+    // Confirmation for "Delete All Data" action.
     @State private var showingDeleteAlert = false
 
     var body: some View {
@@ -129,7 +128,6 @@ struct SettingsView: View {
                 Section("Data") {
                     LabeledContent("Chores",         value: "\(allChores.count)")
                     LabeledContent("Shopping Items",  value: "\(allShoppingItems.count)")
-                    LabeledContent("Categories",     value: "\(allCategories.count)")
                     LabeledContent("Completed",      value: "\(allChores.filter(\.isCompleted).count)")
                 }
 
@@ -138,13 +136,13 @@ struct SettingsView: View {
                     Button(role: .destructive) {
                         showingDeleteAlert = true
                     } label: {
-                        Label("Delete All Chores", systemImage: "trash")
+                        Label("Delete All Data", systemImage: "trash")
                             .foregroundStyle(.red)
                     }
                 } header: {
                     Text("Danger Zone")
                 } footer: {
-                    Text("This permanently deletes all chores and their history. Categories are kept.")
+                    Text("This permanently deletes all chores, shopping items, categories, and completion history.")
                 }
 
                 // ── About ──────────────────────────────────────────────────────
@@ -160,11 +158,11 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
-            .alert("Delete All Chores?", isPresented: $showingDeleteAlert) {
-                Button("Delete All", role: .destructive, action: deleteAllChores)
+            .alert("Delete All Data?", isPresented: $showingDeleteAlert) {
+                Button("Delete Everything", role: .destructive, action: deleteAllData)
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This will permanently delete all \(allChores.count) chore(s) and their completion history. This cannot be undone.")
+                Text("This will permanently delete all chores, shopping items, categories, and completion history. This cannot be undone.")
             }
             // ── CloudKit sharing sheet ──────────────────────────────────────
             .sheet(isPresented: $shareController.showingSharingSheet) {
@@ -208,9 +206,41 @@ struct SettingsView: View {
 
     // ── Actions ────────────────────────────────────────────────────────────────
 
-    private func deleteAllChores() {
-        allChores.forEach(ctx.delete)
-        try? ctx.save()
+    /// Deletes all chores, shopping items, categories, and completion logs.
+    private func deleteAllData() {
+        // Delete all chores (cascade deletes their CompletionLogs).
+        let choreRequest: NSFetchRequest<NSFetchRequestResult> = Chore.fetchRequest()
+        let choreBatch = NSBatchDeleteRequest(fetchRequest: choreRequest)
+        choreBatch.resultType = .resultTypeObjectIDs
+
+        // Delete all shopping items.
+        let shoppingRequest: NSFetchRequest<NSFetchRequestResult> = ShoppingItem.fetchRequest()
+        let shoppingBatch = NSBatchDeleteRequest(fetchRequest: shoppingRequest)
+        shoppingBatch.resultType = .resultTypeObjectIDs
+
+        // Delete all categories.
+        let categoryRequest: NSFetchRequest<NSFetchRequestResult> = Category.fetchRequest()
+        let categoryBatch = NSBatchDeleteRequest(fetchRequest: categoryRequest)
+        categoryBatch.resultType = .resultTypeObjectIDs
+
+        // Delete all completion logs (in case any orphans remain).
+        let logRequest: NSFetchRequest<NSFetchRequestResult> = CompletionLog.fetchRequest()
+        let logBatch = NSBatchDeleteRequest(fetchRequest: logRequest)
+        logBatch.resultType = .resultTypeObjectIDs
+
+        do {
+            let results = try [choreBatch, shoppingBatch, categoryBatch, logBatch].map {
+                try ctx.execute($0) as? NSBatchDeleteResult
+            }
+            // Merge changes into the view context so the UI updates.
+            let objectIDs = results.compactMap { $0?.result as? [NSManagedObjectID] }.flatMap { $0 }
+            NSManagedObjectContext.mergeChanges(
+                fromRemoteContextSave: [NSDeletedObjectsKey: objectIDs],
+                into: [ctx]
+            )
+        } catch {
+            print("Failed to delete all data: \(error.localizedDescription)")
+        }
     }
 }
 

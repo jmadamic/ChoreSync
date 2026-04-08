@@ -54,14 +54,14 @@ HouseholdApp/
     │   └── Color+Hex.swift             ← Color ↔ "#RRGGBB" hex string conversion
     │
     └── Views/
-        ├── RootView.swift              ← TabView: Chores | Shopping | Categories | Settings
+        ├── RootView.swift              ← TabView: Chores | Shopping | Settings
         ├── ChoreList/
         │   ├── ChoreListView.swift     ← Main list, sections, filter bar, swipe actions
         │   └── ChoreRowView.swift      ← Single row: checkbox, badges, due label, assignee icon
         ├── ChoreForm/
-        │   └── ChoreFormView.swift     ← Add/edit sheet: all fields, category pill picker
+        │   └── ChoreFormView.swift     ← Add/edit sheet with inline category management (add/edit/delete)
         ├── Categories/
-        │   ├── CategoryListView.swift  ← Grid of category cards; drill-in to filtered chore list
+        │   ├── CategoryListView.swift  ← Category grid (used internally by form)
         │   └── CategoryFormView.swift  ← Add/edit category: name, colour, icon
         ├── Shopping/
         │   ├── ShoppingListView.swift  ← Shopping list with group-by-store / group-by-type toggle

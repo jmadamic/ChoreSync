@@ -1,11 +1,10 @@
 // RootView.swift
 // HouseholdApp
 //
-// Top-level TabView shell. Provides four tabs:
+// Top-level TabView shell. Provides three tabs:
 //   1. Chores     — the main chore list with filter controls
 //   2. Shopping   — shopping/grocery list grouped by store or type
-//   3. Categories — manage chore categories
-//   4. Settings   — configure person names, sharing, and app info
+//   3. Settings   — configure person names, sharing, and app info
 
 import SwiftUI
 
@@ -31,19 +30,12 @@ struct RootView: View {
                 }
                 .tag(1)
 
-            // ── Tab 3: Categories ──────────────────────────────────────────────
-            CategoryListView()
-                .tabItem {
-                    Label("Categories", systemImage: "square.grid.2x2.fill")
-                }
-                .tag(2)
-
-            // ── Tab 4: Settings ────────────────────────────────────────────────
+            // ── Tab 3: Settings ────────────────────────────────────────────────
             SettingsView()
                 .tabItem {
                     Label("Settings", systemImage: "gearshape.fill")
                 }
-                .tag(3)
+                .tag(2)
         }
         .tint(.accentColor)
     }

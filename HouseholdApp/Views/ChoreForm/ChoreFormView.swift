@@ -6,7 +6,7 @@
 //
 // Fields:
 //   • Title (required)
-//   • Category picker
+//   • Category picker with inline add/edit/delete
 //   • Assignee picker (Me / Partner / Both)
 //   • Due date type + date picker
 //   • Repeat interval
@@ -32,6 +32,11 @@ struct ChoreFormView: View {
     @State private var dueDate      = Date()
     @State private var repeatInt    = RepeatInterval.none
     @State private var selectedCat: Category? = nil
+
+    // ── Category management state ──────────────────────────────────────────────
+    @State private var showingAddCategory = false
+    @State private var categoryToEdit: Category? = nil
+    @State private var categoryToDelete: Category? = nil
 
     // ── Validation ─────────────────────────────────────────────────────────────
     private var isValid: Bool { !title.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -73,18 +78,36 @@ struct ChoreFormView: View {
                     .pickerStyle(.segmented)
                 }
 
-                // ── Category ───────────────────────────────────────────────────
-                Section("Category") {
+                // ── Category (with inline management) ─────────────────────────
+                Section {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             // "None" pill
                             categoryPill(nil)
                             ForEach(categories) { cat in
                                 categoryPill(cat)
+                                    .contextMenu {
+                                        Button {
+                                            categoryToEdit = cat
+                                        } label: {
+                                            Label("Edit", systemImage: "pencil")
+                                        }
+                                        Button(role: .destructive) {
+                                            categoryToDelete = cat
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
                             }
+                            // "Add" pill — creates a new category inline
+                            addCategoryPill
                         }
                         .padding(.vertical, 4)
                     }
+                } header: {
+                    Text("Category")
+                } footer: {
+                    Text("Long press a category to edit or delete it.")
                 }
 
                 // ── When ───────────────────────────────────────────────────────
@@ -156,6 +179,39 @@ struct ChoreFormView: View {
             }
             // Pre-fill when editing an existing chore.
             .onAppear(perform: populateIfEditing)
+            // Sheet: add new category
+            .sheet(isPresented: $showingAddCategory) {
+                CategoryFormView(category: nil)
+            }
+            // Sheet: edit existing category
+            .sheet(item: $categoryToEdit) { cat in
+                CategoryFormView(category: cat)
+            }
+            // Confirmation: delete category
+            .alert(
+                "Delete Category?",
+                isPresented: Binding(
+                    get: { categoryToDelete != nil },
+                    set: { if !$0 { categoryToDelete = nil } }
+                )
+            ) {
+                Button("Delete", role: .destructive) {
+                    if let cat = categoryToDelete {
+                        // If deleting the currently selected category, reset to none.
+                        if selectedCat?.objectID == cat.objectID {
+                            selectedCat = nil
+                        }
+                        ctx.delete(cat)
+                        try? ctx.save()
+                    }
+                    categoryToDelete = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    categoryToDelete = nil
+                }
+            } message: {
+                Text("This will remove \"\(categoryToDelete?.nameSafe ?? "")\" from all chores. Chores won't be deleted — they'll become uncategorized.")
+            }
         }
     }
 
@@ -182,6 +238,24 @@ struct ChoreFormView: View {
         }
         .buttonStyle(.plain)
         .animation(.easeInOut(duration: 0.15), value: isSelected)
+    }
+
+    /// "+" pill at the end of the category row to add a new category.
+    private var addCategoryPill: some View {
+        Button {
+            showingAddCategory = true
+        } label: {
+            Label("Add", systemImage: "plus")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Color.accentColor.opacity(0.12),
+                    in: Capsule()
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     // ── Actions ────────────────────────────────────────────────────────────────
