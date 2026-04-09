@@ -66,7 +66,7 @@ HouseholdApp/
         ├── Shopping/
         │   ├── ShoppingListView.swift  ← Shopping list with group-by-store / group-by-type toggle
         │   ├── ShoppingRowView.swift   ← Single item row: checkbox, quantity, type pill, store label
-        │   └── ShoppingFormView.swift  ← Add/edit sheet: name, quantity, store, type, assignee
+        │   └── ShoppingFormView.swift  ← Add/edit sheet with inline store/type management (add/delete)
         └── Settings/
             └── SettingsView.swift      ← Person names, household sharing, data summary
 ```

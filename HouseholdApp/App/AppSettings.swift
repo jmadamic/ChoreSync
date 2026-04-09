@@ -36,13 +36,21 @@ class AppSettings: ObservableObject {
         willSet { objectWillChange.send() }
     }
 
-    /// All available store names (defaults + user-added), sorted alphabetically.
+    @AppStorage("hiddenStores")
+    private var hiddenStoresRaw: String = "" {
+        willSet { objectWillChange.send() }
+    }
+
+    /// All available store names (defaults + user-added, minus hidden), sorted alphabetically.
     var stores: [String] {
         let custom = customStoresRaw
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        return Array(Set(Self.defaultStores + custom)).sorted()
+        let hidden = Set(hiddenStoresRaw
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) })
+        return Array(Set(Self.defaultStores + custom)).filter { !hidden.contains($0) }.sorted()
     }
 
     /// Adds a new store name. Ignored if it already exists.
@@ -50,6 +58,20 @@ class AppSettings: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, !stores.contains(trimmed) else { return }
         customStoresRaw += customStoresRaw.isEmpty ? trimmed : ",\(trimmed)"
+    }
+
+    /// Removes a store. If it's a default, adds it to the hidden list. If custom, removes it.
+    func removeStore(_ name: String) {
+        // Remove from custom stores if present
+        let custom = customStoresRaw
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0 != name && !$0.isEmpty }
+        customStoresRaw = custom.joined(separator: ",")
+        // If it's a default store, add to hidden list
+        if Self.defaultStores.contains(name) {
+            hiddenStoresRaw += hiddenStoresRaw.isEmpty ? name : ",\(name)"
+        }
     }
 
     // ── Shopping: user-addable item types ──────────────────────────────────────
@@ -61,13 +83,21 @@ class AppSettings: ObservableObject {
         willSet { objectWillChange.send() }
     }
 
-    /// All available item type names (defaults + user-added), sorted alphabetically.
+    @AppStorage("hiddenItemTypes")
+    private var hiddenItemTypesRaw: String = "" {
+        willSet { objectWillChange.send() }
+    }
+
+    /// All available item type names (defaults + user-added, minus hidden), sorted alphabetically.
     var itemTypes: [String] {
         let custom = customItemTypesRaw
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        return Array(Set(Self.defaultItemTypes + custom)).sorted()
+        let hidden = Set(hiddenItemTypesRaw
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) })
+        return Array(Set(Self.defaultItemTypes + custom)).filter { !hidden.contains($0) }.sorted()
     }
 
     /// Adds a new item type name. Ignored if it already exists.
@@ -75,6 +105,18 @@ class AppSettings: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, !itemTypes.contains(trimmed) else { return }
         customItemTypesRaw += customItemTypesRaw.isEmpty ? trimmed : ",\(trimmed)"
+    }
+
+    /// Removes an item type. If it's a default, adds it to the hidden list. If custom, removes it.
+    func removeItemType(_ name: String) {
+        let custom = customItemTypesRaw
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0 != name && !$0.isEmpty }
+        customItemTypesRaw = custom.joined(separator: ",")
+        if Self.defaultItemTypes.contains(name) {
+            hiddenItemTypesRaw += hiddenItemTypesRaw.isEmpty ? name : ",\(name)"
+        }
     }
 
     // ── Convenience helpers ────────────────────────────────────────────────────
