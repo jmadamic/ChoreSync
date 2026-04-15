@@ -1,0 +1,181 @@
+// HouseholdController.swift
+// HouseholdApp
+//
+// Manages the current user's household: create, join via invite code, leave.
+// The household ID is persisted in UserDefaults so the app remembers which
+// household to load on next launch.
+
+import Foundation
+import FirebaseAuth
+import FirebaseFirestore
+
+@MainActor
+final class HouseholdController: ObservableObject {
+
+    // ── Published state ────────────────────────────────────────────────────────
+    @Published private(set) var household: HouseholdDoc?
+    @Published var errorMessage: String?
+    @Published var isBusy: Bool = false
+
+    // Cache the current household ID in UserDefaults across launches.
+    private let householdIdKey = "currentHouseholdId"
+    private var householdListener: ListenerRegistration?
+
+    private var db: Firestore { Firestore.firestore() }
+
+    var currentHouseholdId: String? {
+        UserDefaults.standard.string(forKey: householdIdKey)
+    }
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
+    init() {
+        if let id = currentHouseholdId {
+            startListening(to: id)
+        }
+    }
+
+    deinit {
+        householdListener?.remove()
+    }
+
+    // ── Listen to the current household document ──────────────────────────────
+    private func startListening(to householdId: String) {
+        householdListener?.remove()
+        householdListener = db.collection("households").document(householdId)
+            .addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if let error = error {
+                        self.errorMessage = error.localizedDescription
+                        return
+                    }
+                    if let snapshot = snapshot, snapshot.exists {
+                        self.household = try? snapshot.data(as: HouseholdDoc.self)
+                    } else {
+                        self.household = nil
+                    }
+                }
+            }
+    }
+
+    private func setCurrentHousehold(_ id: String) {
+        UserDefaults.standard.set(id, forKey: householdIdKey)
+        startListening(to: id)
+    }
+
+    private func clearCurrentHousehold() {
+        UserDefaults.standard.removeObject(forKey: householdIdKey)
+        householdListener?.remove()
+        household = nil
+    }
+
+    // ── Create household ───────────────────────────────────────────────────────
+    func createHousehold(name: String?) async {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            errorMessage = "Not signed in."
+            return
+        }
+        isBusy = true
+        defer { isBusy = false }
+        errorMessage = nil
+
+        let householdRef = db.collection("households").document()
+        let inviteCode = Self.generateInviteCode()
+        let doc = HouseholdDoc(
+            id: nil,
+            name: name?.isEmpty == false ? name : nil,
+            inviteCode: inviteCode,
+            memberIds: [uid],
+            ownerId: uid,
+            createdAt: Date()
+        )
+
+        do {
+            let batch = db.batch()
+            try batch.setData(from: doc, forDocument: householdRef)
+            batch.setData([
+                "householdId": householdRef.documentID,
+                "createdAt": FieldValue.serverTimestamp()
+            ], forDocument: db.collection("invites").document(inviteCode))
+            try await batch.commit()
+            setCurrentHousehold(householdRef.documentID)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // ── Join household via invite code ─────────────────────────────────────────
+    func joinHousehold(code: String) async {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            errorMessage = "Not signed in."
+            return
+        }
+        let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !normalized.isEmpty else {
+            errorMessage = "Please enter an invite code."
+            return
+        }
+
+        isBusy = true
+        defer { isBusy = false }
+        errorMessage = nil
+
+        do {
+            let inviteSnap = try await db.collection("invites").document(normalized).getDocument()
+            guard let householdId = inviteSnap.data()?["householdId"] as? String else {
+                errorMessage = "Invite code not found."
+                return
+            }
+            // Add this user to the household's member list.
+            try await db.collection("households").document(householdId).updateData([
+                "memberIds": FieldValue.arrayUnion([uid])
+            ])
+            setCurrentHousehold(householdId)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // ── Leave household ────────────────────────────────────────────────────────
+    func leaveHousehold() async {
+        guard let uid = Auth.auth().currentUser?.uid,
+              let id = currentHouseholdId else { return }
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            try await db.collection("households").document(id).updateData([
+                "memberIds": FieldValue.arrayRemove([uid])
+            ])
+            clearCurrentHousehold()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // ── Rotate invite code (optional future feature) ──────────────────────────
+    func rotateInviteCode() async {
+        guard let id = currentHouseholdId,
+              let oldCode = household?.inviteCode else { return }
+        let newCode = Self.generateInviteCode()
+        do {
+            let batch = db.batch()
+            batch.updateData(["inviteCode": newCode],
+                             forDocument: db.collection("households").document(id))
+            batch.deleteDocument(db.collection("invites").document(oldCode))
+            batch.setData([
+                "householdId": id,
+                "createdAt": FieldValue.serverTimestamp()
+            ], forDocument: db.collection("invites").document(newCode))
+            try await batch.commit()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // ── Invite code generator ─────────────────────────────────────────────────
+    private static func generateInviteCode(length: Int = 6) -> String {
+        // Exclude ambiguous characters (0, O, 1, I, L).
+        let charset = Array("ABCDEFGHJKMNPQRSTUVWXYZ23456789")
+        return String((0..<length).map { _ in charset.randomElement()! })
+    }
+}

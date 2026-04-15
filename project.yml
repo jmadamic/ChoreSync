@@ -13,6 +13,15 @@ options:
   # Keeps Xcode from reordering your source files alphabetically.
   groupSortPosition: none
 
+# ── Swift Package dependencies ────────────────────────────────────────────────
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: "11.0.0"
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "7.1.0"
+
 # ── Targets ────────────────────────────────────────────────────────────────────
 targets:
   HouseholdApp:
@@ -32,6 +41,18 @@ targets:
     resources:
       - path: HouseholdApp/Assets.xcassets
       - path: HouseholdApp/Info.plist
+
+    # ── Linked packages ────────────────────────────────────────────────────────
+    dependencies:
+      - package: Firebase
+        product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseFirestore
+      - package: Firebase
+        product: FirebaseFirestoreSwift
+      - package: GoogleSignIn
+      - package: GoogleSignIn
+        product: GoogleSignInSwift
 
     # ── Build settings ─────────────────────────────────────────────────────────
     settings:
@@ -61,8 +82,7 @@ targets:
       path: HouseholdApp/HouseholdApp.entitlements
 
     # ── Linked frameworks ──────────────────────────────────────────────────────
-    # SwiftUI, CoreData, and CloudKit are automatically linked by Xcode.
-    # No explicit framework entries needed.
+    # SwiftUI is automatically linked by Xcode.
 
 # ── Schemes ────────────────────────────────────────────────────────────────────
 schemes:
