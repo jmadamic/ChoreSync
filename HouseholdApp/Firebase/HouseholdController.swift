@@ -149,19 +149,53 @@ final class HouseholdController: ObservableObject {
     }
 
     // ── Leave household ────────────────────────────────────────────────────────
+    // If the leaving user is the last member, the entire household is deleted
+    // (household doc, invite doc, and all subcollection documents).
     func leaveHousehold() async {
         guard let uid = Auth.auth().currentUser?.uid,
-              let id = currentHouseholdId else { return }
+              let id = currentHouseholdId,
+              let current = household else { return }
         isBusy = true
         defer { isBusy = false }
+
+        let remainingMembers = current.memberIds.filter { $0 != uid }
+
         do {
-            try await db.collection("households").document(id).updateData([
-                "memberIds": FieldValue.arrayRemove([uid])
-            ])
+            if remainingMembers.isEmpty {
+                // Last member leaving — delete everything.
+                try await deleteHousehold(id: id, inviteCode: current.inviteCode)
+            } else {
+                // Others remain — just remove ourselves.
+                try await db.collection("households").document(id).updateData([
+                    "memberIds": FieldValue.arrayRemove([uid])
+                ])
+            }
             clearCurrentHousehold()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    // ── Delete a household and all its data ───────────────────────────────────
+    private func deleteHousehold(id: String, inviteCode: String) async throws {
+        let householdRef = db.collection("households").document(id)
+        let subcollections = ["chores", "categories", "completions", "shoppingItems"]
+
+        // Delete all subcollection documents first (Firestore doesn't cascade).
+        for sub in subcollections {
+            let docs = try await householdRef.collection(sub).getDocuments()
+            if !docs.documents.isEmpty {
+                let batch = db.batch()
+                docs.documents.forEach { batch.deleteDocument($0.reference) }
+                try await batch.commit()
+            }
+        }
+
+        // Delete invite + household in one batch.
+        let batch = db.batch()
+        batch.deleteDocument(db.collection("invites").document(inviteCode))
+        batch.deleteDocument(householdRef)
+        try await batch.commit()
     }
 
     // ── Rotate invite code (optional future feature) ──────────────────────────
