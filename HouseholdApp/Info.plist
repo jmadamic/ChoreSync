@@ -38,25 +38,18 @@
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
 
-    <!-- Required for NSPersistentCloudKitContainer sync -->
-    <key>NSUbiquitousContainers</key>
-    <dict>
-        <!-- Replace with your iCloud container identifier -->
-        <key>iCloud.com.householdapp.app</key>
+    <!-- Google Sign-In URL scheme — required for OAuth redirect back to app -->
+    <key>CFBundleURLTypes</key>
+    <array>
         <dict>
-            <key>NSUbiquitousContainerIsDocumentScopePublic</key>
-            <true/>
-            <key>NSUbiquitousContainerName</key>
-            <string>HouseholdApp</string>
-            <key>NSUbiquitousContainerSupportedFolderLevels</key>
-            <string>None</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>com.googleusercontent.apps.1011569100887-2c9ld1999hcviommtcsmgdqrk1qgeofj</string>
+            </array>
         </dict>
-    </dict>
-
-    <!-- Register for CloudKit share URL handling.
-         When Person B taps a CKShare invite link, iOS routes it to this app. -->
-    <key>CKSharingSupported</key>
-    <true/>
+    </array>
 
     <!-- Blank launch screen (no storyboard needed for SwiftUI) -->
     <key>UILaunchScreen</key>
