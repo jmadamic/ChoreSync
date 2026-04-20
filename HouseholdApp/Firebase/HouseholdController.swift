@@ -69,6 +69,18 @@ final class HouseholdController: ObservableObject {
         household = nil
     }
 
+    // ── Auto-create a personal household (silent, no UI) ──────────────────────
+    // Called right after sign-in. If the user already has a household this is
+    // a no-op. Creates a household named after the user's display name / email
+    // so they land straight in the app without any setup screen.
+    func autoCreateIfNeeded() async {
+        guard currentHouseholdId == nil,
+              let uid = Auth.auth().currentUser?.uid else { return }
+        let displayName = Auth.auth().currentUser?.displayName
+        await createHousehold(name: displayName)
+        _ = uid  // silence unused-variable warning
+    }
+
     // ── Create household ───────────────────────────────────────────────────────
     func createHousehold(name: String?) async {
         guard let uid = Auth.auth().currentUser?.uid else {

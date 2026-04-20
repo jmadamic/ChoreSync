@@ -23,9 +23,12 @@ struct HouseholdAppApp: App {
                     SignInView()
                         .environmentObject(auth)
                 } else if householdCtrl.household == nil {
-                    HouseholdSetupView()
-                        .environmentObject(auth)
-                        .environmentObject(householdCtrl)
+                    // Still setting up (auto-creating household or loading from Firestore).
+                    // Show a spinner; once the household doc arrives we switch to RootView.
+                    ProgressView("Setting up…")
+                        .task {
+                            await householdCtrl.autoCreateIfNeeded()
+                        }
                 } else {
                     RootView()
                         .environmentObject(appSettings)

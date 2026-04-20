@@ -16,6 +16,8 @@ struct SettingsView: View {
     @State private var newMemberName      = ""
     @State private var showingLeaveAlert  = false
     @State private var copiedCode         = false
+    @State private var showingJoinSheet   = false
+    @State private var joinCode           = ""
 
     var body: some View {
         NavigationStack {
@@ -61,6 +63,9 @@ struct SettingsView: View {
                         Text("\(household.memberIds.count) member(s) in this household")
                             .font(.caption).foregroundStyle(.secondary)
 
+                        Button { showingJoinSheet = true } label: {
+                            Label("Join a Different Household", systemImage: "person.badge.plus")
+                        }
                         Button(role: .destructive) { showingLeaveAlert = true } label: {
                             Label("Leave Household", systemImage: "rectangle.portrait.and.arrow.right")
                                 .foregroundStyle(.red)
@@ -68,7 +73,7 @@ struct SettingsView: View {
                     } header: {
                         Text("Household Sharing")
                     } footer: {
-                        Text("Share this code with others. They enter it under Settings → Join Household.")
+                        Text("Share your invite code with others so they can join. Or join someone else's household with their code.")
                     }
                 }
 
@@ -135,6 +140,17 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Enter the name for the new household member.")
+            }
+            .alert("Join a Household", isPresented: $showingJoinSheet) {
+                TextField("6-character invite code", text: $joinCode)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                Button("Join") {
+                    Task { await householdCtrl.joinHousehold(code: joinCode) }
+                }
+                Button("Cancel", role: .cancel) { joinCode = "" }
+            } message: {
+                Text("Enter the invite code from the other person's Settings screen.")
             }
         }
     }
