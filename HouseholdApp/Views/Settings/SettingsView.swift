@@ -116,6 +116,18 @@ struct SettingsView: View {
                     Text("Permanently deletes all chores, shopping items, categories, and completion history.")
                 }
 
+                // ── Appearance ─────────────────────────────────────────────────
+                Section("Appearance") {
+                    Picker(selection: $appSettings.appearance) {
+                        ForEach(AppAppearance.allCases) { mode in
+                            Label(mode.rawValue, systemImage: mode.icon).tag(mode)
+                        }
+                    } label: {
+                        Label("Theme", systemImage: appSettings.appearance.icon)
+                    }
+                    .pickerStyle(.menu)
+                }
+
                 // ── About ──────────────────────────────────────────────────────
                 Section("About") {
                     LabeledContent("Version") {

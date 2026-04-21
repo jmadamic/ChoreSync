@@ -56,6 +56,7 @@ struct HouseholdAppApp: App {
                         }
                 }
             }
+            .preferredColorScheme(appSettings.appearance.colorScheme)
         }
     }
 }
