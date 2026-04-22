@@ -1,22 +1,15 @@
 // CategoryFormView.swift
-// HouseholdApp
-//
-// Sheet for creating or editing a category.
-// User picks a name, a color, and an SF Symbol icon.
-// When editing, a delete option appears at the bottom.
-
 import SwiftUI
 
 struct CategoryFormView: View {
 
-    @Environment(\.managedObjectContext) private var ctx
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dismiss)           private var dismiss
+    @EnvironmentObject private var categoryStore: CategoryStore
+    @EnvironmentObject private var householdCtrl: HouseholdController
 
-    let category: Category?
-    /// Callback when user deletes the category from this screen.
+    let category: CategoryDoc?
     var onDelete: (() -> Void)? = nil
 
-    // ── Form state ─────────────────────────────────────────────────────────────
     @State private var name     = ""
     @State private var color    = Color.blue
     @State private var iconName = "star.fill"
@@ -24,18 +17,8 @@ struct CategoryFormView: View {
 
     private var isValid: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
     private var isEditing: Bool { category != nil }
+    private var householdId: String { householdCtrl.household?.id ?? "" }
 
-    // ── Available icons ────────────────────────────────────────────────────────
-    static let iconOptions: [String] = [
-        "fork.knife",   "cup.and.saucer.fill", "trash.fill",       "washer.fill",
-        "shower",       "bed.double.fill",      "sofa.fill",        "chair.fill",
-        "cart.fill",    "leaf.fill",            "figure.walk",      "car.fill",
-        "house.fill",   "envelope.fill",        "phone.fill",       "pawprint.fill",
-        "wrench.fill",  "lightbulb.fill",       "paintbrush.fill",  "scissors",
-        "hammer.fill",  "archivebox.fill",      "bag.fill",         "star.fill",
-    ]
-
-    // ── Preset colors ──────────────────────────────────────────────────────────
     private let colorOptions: [Color] = [
         .red, .orange, .yellow, .green, .mint, .teal,
         .cyan, .blue, .indigo, .purple, .pink, .gray,
@@ -44,23 +27,16 @@ struct CategoryFormView: View {
     var body: some View {
         NavigationStack {
             Form {
-
-                // ── Name ───────────────────────────────────────────────────────
                 Section("Name") {
                     TextField("Category name", text: $name)
                 }
 
-                // ── Preview ────────────────────────────────────────────────────
                 Section {
                     HStack {
                         Spacer()
                         VStack(spacing: 8) {
-                            Image(systemName: iconName)
-                                .font(.largeTitle)
-                                .foregroundStyle(color)
-                            Text(name.isEmpty ? "Preview" : name)
-                                .font(.headline)
-                                .foregroundStyle(.primary)
+                            AppIcon(name: iconName, color: color, font: .largeTitle)
+                            Text(name.isEmpty ? "Preview" : name).font(.headline)
                         }
                         .padding()
                         .frame(width: 120, height: 100)
@@ -70,42 +46,24 @@ struct CategoryFormView: View {
                 }
                 .listRowBackground(Color.clear)
 
-                // ── Color ──────────────────────────────────────────────────────
                 Section("Color") {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 10) {
                         ForEach(colorOptions, id: \.self) { c in
-                            Circle()
-                                .fill(c)
-                                .frame(width: 36, height: 36)
+                            Circle().fill(c).frame(width: 36, height: 36)
                                 .overlay(
-                                    Circle().stroke(.white.opacity(0.8), lineWidth: color == c ? 3 : 0)
+                                    Image(systemName: "checkmark")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(.white)
+                                        .opacity(color == c ? 1 : 0)
                                 )
-                                .shadow(color: c.opacity(color == c ? 0.5 : 0), radius: 4)
-                                .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { color = c } }
+                                .onTapGesture { color = c }
                         }
                     }
                     .padding(.vertical, 4)
                 }
 
-                // ── Icon ───────────────────────────────────────────────────────
-                Section("Icon") {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 10) {
-                        ForEach(Self.iconOptions, id: \.self) { icon in
-                            Image(systemName: icon)
-                                .font(.title2)
-                                .foregroundStyle(iconName == icon ? .white : color)
-                                .frame(width: 40, height: 40)
-                                .background(
-                                    iconName == icon ? color : color.opacity(0.12),
-                                    in: RoundedRectangle(cornerRadius: 8)
-                                )
-                                .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { iconName = icon } }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
+                IconPickerSection(iconName: $iconName, accentColor: color)
 
-                // ── Delete (only when editing) ─────────────────────────────────
                 if isEditing {
                     Section {
                         Button(role: .destructive) {
@@ -113,66 +71,56 @@ struct CategoryFormView: View {
                         } label: {
                             HStack {
                                 Spacer()
-                                Text("Delete")
+                                Text("Delete").foregroundStyle(.red)
                                 Spacer()
                             }
                         }
-                    } footer: {
-                        Text("Chores in this category will become uncategorized.")
                     }
                 }
             }
             .navigationTitle(isEditing ? "Edit Category" : "New Category")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .disabled(!isValid)
-                        .fontWeight(.semibold)
+                    Button("Save") { save() }.disabled(!isValid).fontWeight(.semibold)
                 }
             }
-            .onAppear(perform: populateIfEditing)
+            .onAppear(perform: populate)
             .alert("Delete Category?", isPresented: $showingDeleteAlert) {
                 Button("Delete", role: .destructive) {
-                    if let category {
-                        ctx.delete(category)
-                        try? ctx.save()
+                    if let cat = category {
+                        categoryStore.delete(cat, householdId: householdId)
+                        onDelete?()
                     }
-                    onDelete?()
                     dismiss()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This will remove \"\(category?.nameSafe ?? "")\" from all chores. Chores won't be deleted — they'll become uncategorized.")
+                Text("Chores in this category will become uncategorized.")
             }
         }
     }
 
-    // ── Actions ────────────────────────────────────────────────────────────────
-
-    private func populateIfEditing() {
-        guard let category else { return }
-        name     = category.nameSafe
-        iconName = category.iconNameSafe
-        color    = category.color
+    private func populate() {
+        guard let cat = category else { return }
+        name     = cat.name
+        color    = Color(hex: cat.colorHex) ?? .blue
+        iconName = cat.iconName
     }
 
     private func save() {
-        let target = category ?? Category(context: ctx)
-        target.id        = target.id ?? UUID()
-        target.name      = name.trimmingCharacters(in: .whitespaces)
-        target.iconName  = iconName
-        target.colorHex  = color.hexString
-        target.sortOrder = target.sortOrder
-        try? ctx.save()
+        let hexString = color.hexString
+        var target = category ?? CategoryDoc(
+            id: UUID().uuidString, name: "", colorHex: "#4A90E2", iconName: "star.fill", sortOrder: 0
+        )
+        target.name     = name.trimmingCharacters(in: .whitespaces)
+        target.colorHex = hexString
+        target.iconName = iconName
+        if category == nil {
+            target.sortOrder = Int32(categoryStore.categories.count)
+        }
+        categoryStore.save(target, householdId: householdId)
         dismiss()
     }
-}
-
-#Preview {
-    CategoryFormView(category: nil)
-        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
 }

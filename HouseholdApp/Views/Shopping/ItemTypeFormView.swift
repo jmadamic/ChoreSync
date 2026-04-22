@@ -40,9 +40,7 @@ struct ItemTypeFormView: View {
                     HStack {
                         Spacer()
                         VStack(spacing: 8) {
-                            Image(systemName: iconName)
-                                .font(.largeTitle)
-                                .foregroundStyle(.orange)
+                            AppIcon(name: iconName, color: .orange, font: .largeTitle)
                             Text(name.isEmpty ? "Preview" : name)
                                 .font(.headline)
                                 .foregroundStyle(.primary)
@@ -56,22 +54,7 @@ struct ItemTypeFormView: View {
                 .listRowBackground(Color.clear)
 
                 // ── Icon ───────────────────────────────────────────────────────
-                Section("Icon") {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 10) {
-                        ForEach(CategoryFormView.iconOptions, id: \.self) { icon in
-                            Image(systemName: icon)
-                                .font(.title2)
-                                .foregroundStyle(iconName == icon ? .white : .orange)
-                                .frame(width: 40, height: 40)
-                                .background(
-                                    iconName == icon ? Color.orange : Color.orange.opacity(0.12),
-                                    in: RoundedRectangle(cornerRadius: 8)
-                                )
-                                .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { iconName = icon } }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
+                IconPickerSection(iconName: $iconName, accentColor: .orange)
 
                 // ── Delete (only when editing) ─────────────────────────────────
                 if isEditing {

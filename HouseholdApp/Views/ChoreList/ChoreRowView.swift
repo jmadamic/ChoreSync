@@ -1,74 +1,57 @@
 // ChoreRowView.swift
-// HouseholdApp
-//
-// A single row in the chore list.
-// Left side: circular completion checkbox (tap to mark done).
-// Center: title, category badge, repeat badge.
-// Right: due date label + assignee icon.
-
 import SwiftUI
 
 struct ChoreRowView: View {
 
-    @Environment(\.managedObjectContext) private var ctx
-    @EnvironmentObject private var appSettings: AppSettings
+    @EnvironmentObject private var appSettings:   AppSettings
+    @EnvironmentObject private var choreStore:    ChoreStore
+    @EnvironmentObject private var categoryStore: CategoryStore
+    @EnvironmentObject private var householdCtrl: HouseholdController
 
-    @ObservedObject var chore: Chore
-
+    let chore: ChoreDoc
     @State private var checkAnimating = false
+
+    private var householdId: String { householdCtrl.household?.id ?? "" }
+    private var category: CategoryDoc? {
+        guard let cid = chore.categoryId else { return nil }
+        return categoryStore.categories.first { $0.id == cid }
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-
-            // ── Completion checkbox ────────────────────────────────────────────
             completionButton
-
-            // ── Chore info ─────────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 4) {
                 Text(chore.titleSafe)
                     .font(.body)
                     .strikethrough(chore.isCompleted, color: .secondary)
                     .foregroundStyle(chore.isCompleted ? .secondary : .primary)
-
                 HStack(spacing: 6) {
-                    if let category = chore.category {
-                        categoryBadge(for: category)
-                    }
-                    if chore.repeatIntervalEnum != .none {
-                        repeatBadge
-                    }
+                    if let cat = category { categoryBadge(for: cat) }
+                    if chore.repeatIntervalEnum != .none { repeatBadge }
                 }
             }
-
             Spacer()
-
-            // ── Right side: due label + assignee ──────────────────────────────
             VStack(alignment: .trailing, spacing: 4) {
                 if let label = chore.dueDateLabel {
-                    Text(label)
-                        .font(.caption)
+                    Text(label).font(.caption)
                         .foregroundStyle(chore.isOverdue ? .red : .secondary)
                 }
-                assigneeIcon
+                assigneeView
             }
         }
         .padding(.vertical, 2)
         .opacity(chore.isCompleted ? 0.6 : 1.0)
     }
 
-    // ── Subviews ───────────────────────────────────────────────────────────────
-
     private var completionButton: some View {
         Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                checkAnimating = true
-            }
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { checkAnimating = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 checkAnimating = false
                 if chore.isCompleted {
-                    chore.markIncomplete(in: ctx)
+                    choreStore.markIncomplete(chore, householdId: householdId)
                 } else {
-                    chore.markComplete(byMemberIndex: 0, in: ctx)
+                    choreStore.markComplete(chore, byMemberIndex: 0, householdId: householdId)
                 }
             }
         } label: {
@@ -80,46 +63,35 @@ struct ChoreRowView: View {
         .buttonStyle(.plain)
     }
 
-    private func categoryBadge(for category: Category) -> some View {
-        Label(category.nameSafe, systemImage: category.iconNameSafe)
+    private func categoryBadge(for cat: CategoryDoc) -> some View {
+        let color = Color(hex: cat.colorHex) ?? .gray
+        return AppIconLabel(title: cat.nameSafe, icon: cat.iconNameSafe, color: color)
             .font(.caption2.weight(.medium))
-            .foregroundStyle(category.color)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(category.color.opacity(0.12), in: Capsule())
+            .foregroundStyle(color)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(color.opacity(0.12), in: Capsule())
     }
 
     private var repeatBadge: some View {
         Label(chore.repeatIntervalEnum.label, systemImage: "repeat")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
+            .font(.caption2).foregroundStyle(.secondary)
     }
 
-    private var assigneeIcon: some View {
-        let indices = Array(chore.assignedMemberIndices.sorted())
+    private var assigneeView: some View {
+        let indices = chore.assignedToMembers.sorted()
         return Group {
             if indices.isEmpty {
-                // Everyone
-                Image(systemName: "person.2.fill")
-                    .font(.caption)
-                    .foregroundStyle(.purple)
+                Image(systemName: "person.2.fill").font(.caption).foregroundStyle(.purple)
             } else if indices.count == 1, let idx = indices.first {
-                // Single member
-                Image(systemName: "person.fill")
-                    .font(.caption)
+                Image(systemName: "person.fill").font(.caption)
                     .foregroundStyle(appSettings.memberColor(at: idx))
             } else {
-                // Multiple members — show colored dots
                 HStack(spacing: 3) {
                     ForEach(indices.prefix(3), id: \.self) { idx in
-                        Circle()
-                            .fill(appSettings.memberColor(at: idx))
-                            .frame(width: 7, height: 7)
+                        Circle().fill(appSettings.memberColor(at: idx)).frame(width: 7, height: 7)
                     }
                     if indices.count > 3 {
-                        Text("+\(indices.count - 3)")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.secondary)
+                        Text("+\(indices.count - 3)").font(.system(size: 8)).foregroundStyle(.secondary)
                     }
                 }
             }

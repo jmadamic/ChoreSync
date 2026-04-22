@@ -1,71 +1,45 @@
 // ChoreListView.swift
-// HouseholdApp
-//
-// Main screen. Shows all chores grouped into sections by urgency/date.
-// A segmented control at the top filters by assignee (All / each member).
-// Tapping the "+" toolbar button presents the add-chore sheet.
-
 import SwiftUI
-import CoreData
 
 struct ChoreListView: View {
 
-    @Environment(\.managedObjectContext) private var ctx
-    @EnvironmentObject private var appSettings: AppSettings
+    @EnvironmentObject private var appSettings:   AppSettings
+    @EnvironmentObject private var choreStore:    ChoreStore
+    @EnvironmentObject private var categoryStore: CategoryStore
+    @EnvironmentObject private var householdCtrl: HouseholdController
 
-    // ── Filter state ───────────────────────────────────────────────────────────
-    // -2 = All, 0+ = specific member index
-    @State private var filterIndex: Int = -2
+    @State private var filterIndex     = -2   // -2=All, 0+=member
+    @State private var showingAddChore = false
+    @State private var choreToEdit: ChoreDoc?  = nil
+    @State private var showDeleteAlert = false
+    @State private var choreToDelete: ChoreDoc? = nil
 
-    // ── Sheet / alert state ────────────────────────────────────────────────────
-    @State private var showingAddChore   = false
-    @State private var choreToEdit: Chore? = nil
-    @State private var showingDeleteAlert = false
-    @State private var choreToDelete: Chore? = nil
+    private var householdId: String { householdCtrl.household?.id ?? "" }
 
-    // ── Fetch request ──────────────────────────────────────────────────────────
-    @FetchRequest(
-        sortDescriptors: [
-            SortDescriptor(\Chore.isCompleted, order: .forward),
-            SortDescriptor(\Chore.sortOrder,   order: .forward),
-            SortDescriptor(\Chore.createdAt,   order: .reverse),
-        ],
-        animation: .default
-    ) private var allChores: FetchedResults<Chore>
-
-    // ── Derived data ───────────────────────────────────────────────────────────
-
-    /// Chores filtered by the current assignee tab.
-    private var filteredChores: [Chore] {
-        guard filterIndex >= 0 else { return Array(allChores) }
-        // Specific member: show chores assigned to them OR to everyone (empty set).
-        return allChores.filter {
-            $0.assignedMemberIndices.isEmpty ||
-            $0.assignedMemberIndices.contains(filterIndex)
+    private var filteredChores: [ChoreDoc] {
+        guard filterIndex >= 0 else { return choreStore.chores }
+        return choreStore.chores.filter {
+            $0.assignedToMembers.isEmpty || $0.assignedToMembers.contains(filterIndex)
         }
     }
 
     private var sections: [ChoreSection] {
-        let sectionOrder: [ChoreSection] = [.overdue, .today, .thisWeek, .thisMonth, .upcoming, .noDate, .completed]
+        let order: [ChoreSection] = [.overdue, .today, .thisWeek, .thisMonth, .upcoming, .noDate, .completed]
         let present = Set(filteredChores.map { $0.section })
-        return sectionOrder.filter { present.contains($0) }
+        return order.filter { present.contains($0) }
     }
 
-    private func chores(in section: ChoreSection) -> [Chore] {
+    private func chores(in section: ChoreSection) -> [ChoreDoc] {
         filteredChores.filter { $0.section == section }
     }
 
-    // ── Body ───────────────────────────────────────────────────────────────────
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-
-                // ── Assignee filter ────────────────────────────────────────────
                 filterBar
-
-                // ── Chore list ─────────────────────────────────────────────────
                 if filteredChores.isEmpty {
-                    emptyState
+                    ContentUnavailableView("No Chores", systemImage: "checkmark.seal.fill",
+                                          description: Text("Tap + to add your first chore."))
                 } else {
                     List {
                         ForEach(sections, id: \.self) { section in
@@ -75,15 +49,15 @@ struct ChoreListView: View {
                                         .contentShape(Rectangle())
                                         .onTapGesture { choreToEdit = chore }
                                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                            deleteSwipeAction(for: chore)
+                                            Button(role: .destructive) {
+                                                choreToDelete = chore; showDeleteAlert = true
+                                            } label: { Label("Delete", systemImage: "trash") }
                                         }
                                         .swipeActions(edge: .leading) {
                                             completeSwipeAction(for: chore)
                                         }
                                 }
-                            } header: {
-                                sectionHeader(section)
-                            }
+                            } header: { sectionHeader(section) }
                         }
                     }
                     .listStyle(.insetGrouped)
@@ -92,30 +66,21 @@ struct ChoreListView: View {
             .navigationTitle("Chores")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showingAddChore = true
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
+                    Button { showingAddChore = true } label: {
+                        Image(systemName: "plus.circle.fill").font(.title2)
                     }
                 }
             }
-            .sheet(isPresented: $showingAddChore) {
-                ChoreFormView(chore: nil)
-            }
-            .sheet(item: $choreToEdit) { chore in
-                ChoreFormView(chore: chore)
-            }
-            .alert("Delete Chore?", isPresented: $showingDeleteAlert, presenting: choreToDelete) { chore in
-                Button("Delete", role: .destructive) { delete(chore) }
+            .sheet(isPresented: $showingAddChore)   { ChoreFormView(chore: nil) }
+            .sheet(item: $choreToEdit)              { ChoreFormView(chore: $0) }
+            .alert("Delete Chore?", isPresented: $showDeleteAlert, presenting: choreToDelete) { chore in
+                Button("Delete", role: .destructive) {
+                    choreStore.delete(chore, householdId: householdId)
+                }
                 Button("Cancel", role: .cancel) {}
-            } message: { chore in
-                Text("\"\(chore.titleSafe)\" will be permanently deleted.")
-            }
+            } message: { Text("\"\($0.titleSafe)\" will be permanently deleted.") }
         }
     }
-
-    // ── Subviews ───────────────────────────────────────────────────────────────
 
     private var filterBar: some View {
         Picker("Filter", selection: $filterIndex) {
@@ -125,17 +90,8 @@ struct ChoreListView: View {
             }
         }
         .pickerStyle(.segmented)
-        .padding(.horizontal)
-        .padding(.vertical, 8)
+        .padding(.horizontal).padding(.vertical, 8)
         .background(Color(.systemGroupedBackground))
-    }
-
-    private var emptyState: some View {
-        ContentUnavailableView(
-            "No Chores",
-            systemImage: "checkmark.seal.fill",
-            description: Text("Tap + to add your first chore.")
-        )
     }
 
     private func sectionHeader(_ section: ChoreSection) -> some View {
@@ -144,53 +100,22 @@ struct ChoreListView: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(section == .overdue ? .red : .secondary)
             Spacer()
-            Text("\(chores(in: section).count)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    // ── Swipe actions ──────────────────────────────────────────────────────────
-
-    private func deleteSwipeAction(for chore: Chore) -> some View {
-        Button(role: .destructive) {
-            choreToDelete = chore
-            showingDeleteAlert = true
-        } label: {
-            Label("Delete", systemImage: "trash")
+            Text("\(chores(in: section).count)").font(.caption).foregroundStyle(.secondary)
         }
     }
 
     @ViewBuilder
-    private func completeSwipeAction(for chore: Chore) -> some View {
+    private func completeSwipeAction(for chore: ChoreDoc) -> some View {
         if chore.isCompleted {
             Button {
-                chore.markIncomplete(in: ctx)
-            } label: {
-                Label("Undo", systemImage: "arrow.uturn.backward")
-            }
+                choreStore.markIncomplete(chore, householdId: householdId)
+            } label: { Label("Undo", systemImage: "arrow.uturn.backward") }
             .tint(.orange)
         } else {
             Button {
-                // Default to member 0 for quick-complete.
-                chore.markComplete(byMemberIndex: 0, in: ctx)
-            } label: {
-                Label("Done", systemImage: "checkmark")
-            }
+                choreStore.markComplete(chore, byMemberIndex: 0, householdId: householdId)
+            } label: { Label("Done", systemImage: "checkmark") }
             .tint(.green)
         }
     }
-
-    // ── Actions ────────────────────────────────────────────────────────────────
-
-    private func delete(_ chore: Chore) {
-        ctx.delete(chore)
-        try? ctx.save()
-    }
-}
-
-#Preview {
-    ChoreListView()
-        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
-        .environmentObject(AppSettings())
 }

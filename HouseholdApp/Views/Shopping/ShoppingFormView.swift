@@ -1,65 +1,43 @@
 // ShoppingFormView.swift
-// HouseholdApp
-//
-// Sheet for adding a new shopping item or editing an existing one.
-// Pass `item: nil` to create, or pass an existing ShoppingItem to edit.
-//
-// Fields: Name (required), Quantity, Item Type, Store, Assignee, Notes.
-// Item types and stores use dropdown pickers with add/edit options.
-
 import SwiftUI
-import CoreData
 
-/// Lightweight wrapper so a plain String can drive `.sheet(item:)`.
 private struct IdentifiableString: Identifiable {
-    let id: String
-    var value: String { id }
+    let id: String; var value: String { id }
     init(value: String) { self.id = value }
 }
 
 struct ShoppingFormView: View {
 
-    @Environment(\.managedObjectContext) private var ctx
-    @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var appSettings: AppSettings
+    @Environment(\.dismiss)           private var dismiss
+    @EnvironmentObject private var appSettings:   AppSettings
+    @EnvironmentObject private var shoppingStore: ShoppingStore
+    @EnvironmentObject private var householdCtrl: HouseholdController
 
-    let item: ShoppingItem?
+    let item: ShoppingItemDoc?
 
-    // ── Form state ─────────────────────────────────────────────────────────────
     @State private var name            = ""
     @State private var quantity        = ""
     @State private var store           = ""
     @State private var itemType        = ""
-    /// Empty set = Everyone. Non-empty = specific member indices.
     @State private var selectedMembers: Set<Int> = []
     @State private var notes           = ""
 
-    // ── Store management state ────────────────────────────────────────────────
-    @State private var showingAddStore    = false
+    @State private var showingAddStore = false
     @State private var storeToEdit: String? = nil
-
-    // ── Type management state ─────────────────────────────────────────────────
-    @State private var showingAddType     = false
+    @State private var showingAddType  = false
     @State private var typeToEdit: String? = nil
 
     private var isValid: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
-
-    init(item: ShoppingItem?) {
-        self.item = item
-    }
+    private var householdId: String { householdCtrl.household?.id ?? "" }
 
     var body: some View {
         NavigationStack {
             Form {
-
-                // ── Name + Quantity ────────────────────────────────────────────
                 Section {
                     TextField("Item name", text: $name)
-                    TextField("Quantity (optional)", text: $quantity)
-                        .textInputAutocapitalization(.never)
+                    TextField("Quantity (optional)", text: $quantity).textInputAutocapitalization(.never)
                 }
 
-                // ── Who ────────────────────────────────────────────────────────
                 Section("Who's buying") {
                     ForEach(Array(appSettings.members.indices), id: \.self) { idx in
                         Toggle(appSettings.memberName(at: idx), isOn: Binding(
@@ -69,179 +47,107 @@ struct ShoppingFormView: View {
                         .tint(appSettings.memberColor(at: idx))
                     }
                     if !selectedMembers.isEmpty {
-                        Button("Select All") {
-                            selectedMembers = []
-                        }
-                        .foregroundStyle(.blue)
+                        Button("Select All") { selectedMembers = [] }.foregroundStyle(.blue)
                     }
                 }
 
-                // ── Item Type (dropdown with add/edit) ───────────────────────
                 Section("Type") {
                     Picker("Item type", selection: $itemType) {
                         Text("None").tag("")
-                        ForEach(appSettings.itemTypes, id: \.self) { type in
-                            Label(type, systemImage: appSettings.iconForItemType(type))
-                                .tag(type)
+                        ForEach(appSettings.itemTypes, id: \.self) { t in
+                            AppIconLabel(title: t, icon: appSettings.iconForItemType(t)).tag(t)
                         }
                     }
-
-                    Button {
-                        showingAddType = true
-                    } label: {
-                        Label("Add New Type...", systemImage: "plus.circle")
-                            .font(.subheadline)
+                    Button { showingAddType = true } label: {
+                        Label("Add New Type...", systemImage: "plus.circle").font(.subheadline)
                     }
-
                     if !itemType.isEmpty {
-                        Button {
-                            typeToEdit = itemType
-                        } label: {
-                            Label("Edit \"\(itemType)\"", systemImage: "pencil")
-                                .font(.subheadline)
+                        Button { typeToEdit = itemType } label: {
+                            Label("Edit \"\(itemType)\"", systemImage: "pencil").font(.subheadline)
                         }
                     }
                 }
 
-                // ── Store (dropdown with add/edit) ───────────────────────────
                 Section("Store") {
                     Picker("Store", selection: $store) {
                         Text("None").tag("")
                         ForEach(appSettings.stores, id: \.self) { s in
-                            Label(s, systemImage: appSettings.iconForStore(s))
-                                .tag(s)
+                            AppIconLabel(title: s, icon: appSettings.iconForStore(s)).tag(s)
                         }
                     }
-
-                    Button {
-                        showingAddStore = true
-                    } label: {
-                        Label("Add New Store...", systemImage: "plus.circle")
-                            .font(.subheadline)
+                    Button { showingAddStore = true } label: {
+                        Label("Add New Store...", systemImage: "plus.circle").font(.subheadline)
                     }
-
                     if !store.isEmpty {
-                        Button {
-                            storeToEdit = store
-                        } label: {
-                            Label("Edit \"\(store)\"", systemImage: "pencil")
-                                .font(.subheadline)
+                        Button { storeToEdit = store } label: {
+                            Label("Edit \"\(store)\"", systemImage: "pencil").font(.subheadline)
                         }
                     }
                 }
 
-                // ── Notes ──────────────────────────────────────────────────────
                 Section("Notes (optional)") {
-                    TextEditor(text: $notes)
-                        .frame(minHeight: 60)
+                    TextEditor(text: $notes).frame(minHeight: 60)
                 }
             }
             .navigationTitle(item == nil ? "New Item" : "Edit Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .disabled(!isValid)
-                        .fontWeight(.semibold)
+                    Button("Save") { save() }.disabled(!isValid).fontWeight(.semibold)
                 }
             }
-            .onAppear(perform: populateIfEditing)
-
-            // ── Sheet: add new store ───────────────────────────────────────────
+            .onAppear(perform: populate)
             .sheet(isPresented: $showingAddStore) {
-                StoreFormView(originalName: nil, onSave: { newName in
-                    store = newName
-                })
+                StoreFormView(originalName: nil) { store = $0 }
             }
-
-            // ── Sheet: edit existing store ─────────────────────────────────────
             .sheet(item: Binding(
                 get: { storeToEdit.map { IdentifiableString(value: $0) } },
                 set: { storeToEdit = $0?.value }
-            )) { wrapper in
-                StoreFormView(originalName: wrapper.value, onDelete: {
-                    store = ""
-                }, onSave: { newName in
-                    store = newName
-                })
-            }
-
-            // ── Sheet: add new type ────────────────────────────────────────────
+            )) { w in StoreFormView(originalName: w.value, onDelete: { store = "" }, onSave: { store = $0 }) }
             .sheet(isPresented: $showingAddType) {
-                ItemTypeFormView(originalName: nil, onSave: { newName in
-                    itemType = newName
-                })
+                ItemTypeFormView(originalName: nil) { itemType = $0 }
             }
-
-            // ── Sheet: edit existing type ──────────────────────────────────────
             .sheet(item: Binding(
                 get: { typeToEdit.map { IdentifiableString(value: $0) } },
                 set: { typeToEdit = $0?.value }
-            )) { wrapper in
-                ItemTypeFormView(originalName: wrapper.value, onDelete: {
-                    itemType = ""
-                }, onSave: { newName in
-                    itemType = newName
-                })
-            }
+            )) { w in ItemTypeFormView(originalName: w.value, onDelete: { itemType = "" }, onSave: { itemType = $0 }) }
         }
     }
 
-    // ── Member selection helpers ───────────────────────────────────────────────
-
-    private func isMemberIncluded(_ idx: Int) -> Bool {
-        selectedMembers.isEmpty || selectedMembers.contains(idx)
-    }
+    private func isMemberIncluded(_ idx: Int) -> Bool { selectedMembers.isEmpty || selectedMembers.contains(idx) }
 
     private func toggleMember(_ idx: Int) {
         if selectedMembers.isEmpty {
             guard appSettings.members.count > 1 else { return }
             selectedMembers = Set(appSettings.members.indices.filter { $0 != idx })
         } else if selectedMembers.contains(idx) {
-            var updated = selectedMembers
-            updated.remove(idx)
-            if !updated.isEmpty { selectedMembers = updated }
+            var u = selectedMembers; u.remove(idx); if !u.isEmpty { selectedMembers = u }
         } else {
-            var updated = selectedMembers
-            updated.insert(idx)
-            selectedMembers = updated.count == appSettings.members.count ? [] : updated
+            var u = selectedMembers; u.insert(idx)
+            selectedMembers = u.count == appSettings.members.count ? [] : u
         }
     }
 
-    // ── Actions ────────────────────────────────────────────────────────────────
-
-    private func populateIfEditing() {
-        guard let item else { return }
-        name            = item.nameSafe
-        quantity        = item.quantity ?? ""
-        store           = item.store ?? ""
-        itemType        = item.itemType ?? ""
-        selectedMembers = item.assignedMemberIndices
-        notes           = item.notes ?? ""
+    private func populate() {
+        guard let i = item else { return }
+        name = i.name; quantity = i.quantity ?? ""; store = i.store ?? ""
+        itemType = i.itemType ?? ""; selectedMembers = Set(i.assignedToMembers); notes = i.notes ?? ""
     }
 
     private func save() {
-        let target = item ?? ShoppingItem(context: ctx)
-
-        target.id                    = target.id ?? UUID()
-        target.name                  = name.trimmingCharacters(in: .whitespaces)
-        target.quantity              = quantity.isEmpty ? nil : quantity
-        target.store                 = store.isEmpty ? nil : store
-        target.itemType              = itemType.isEmpty ? nil : itemType
-        target.assignedMemberIndices = selectedMembers
-        target.notes                 = notes.isEmpty ? nil : notes
-        target.createdAt             = target.createdAt ?? Date()
-
-        try? ctx.save()
+        var target = item ?? ShoppingItemDoc(
+            id: UUID().uuidString, name: "", quantity: nil, store: nil, itemType: nil,
+            assignedToMembers: [], isPurchased: false, purchasedAt: nil, notes: nil,
+            sortOrder: 0, createdAt: Date()
+        )
+        target.name             = name.trimmingCharacters(in: .whitespaces)
+        target.quantity         = quantity.isEmpty ? nil : quantity
+        target.store            = store.isEmpty ? nil : store
+        target.itemType         = itemType.isEmpty ? nil : itemType
+        target.assignedToMembers = selectedMembers.sorted()
+        target.notes            = notes.isEmpty ? nil : notes
+        shoppingStore.save(target, householdId: householdId)
         dismiss()
     }
-}
-
-#Preview {
-    ShoppingFormView(item: nil)
-        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
-        .environmentObject(AppSettings())
 }

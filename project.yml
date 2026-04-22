@@ -10,8 +10,16 @@ options:
     iOS: "17.0"
   defaultConfig: Debug
   createIntermediateGroups: true
-  # Keeps Xcode from reordering your source files alphabetically.
   groupSortPosition: none
+
+# ── Swift Package Manager dependencies ────────────────────────────────────────
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: "11.0.0"
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "7.1.0"
 
 # ── Targets ────────────────────────────────────────────────────────────────────
 targets:
@@ -21,10 +29,8 @@ targets:
     deploymentTarget: "17.0"
 
     # ── Source files ───────────────────────────────────────────────────────────
-    # xcodegen auto-discovers all .swift files and resources under HouseholdApp/.
     sources:
       - path: HouseholdApp
-        # Exclude the entitlements file from compilation (it's a resource).
         excludes:
           - "**/*.entitlements"
 
@@ -32,21 +38,32 @@ targets:
     resources:
       - path: HouseholdApp/Assets.xcassets
       - path: HouseholdApp/Info.plist
+      - path: HouseholdApp/GoogleService-Info.plist
+        optional: true
+
+    # ── Linked packages ────────────────────────────────────────────────────────
+    dependencies:
+      - package: Firebase
+        product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseFirestore
+      - package: GoogleSignIn
+      - package: GoogleSignIn
+        product: GoogleSignInSwift
 
     # ── Build settings ─────────────────────────────────────────────────────────
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.householdapp.app
         SWIFT_VERSION: "5.9"
-        # Target both iPhone and iPad.
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_FILE: HouseholdApp/Info.plist
         CODE_SIGN_ENTITLEMENTS: HouseholdApp/HouseholdApp.entitlements
-        MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "1"
-        # Use automatic signing — fill in your team ID or use Xcode UI.
+        MARKETING_VERSION: "1.1"
+        CURRENT_PROJECT_VERSION: "2"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
+        CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION: YES
       configs:
         Debug:
           DEBUG_INFORMATION_FORMAT: dwarf
@@ -59,10 +76,6 @@ targets:
     # ── Entitlements ───────────────────────────────────────────────────────────
     entitlements:
       path: HouseholdApp/HouseholdApp.entitlements
-
-    # ── Linked frameworks ──────────────────────────────────────────────────────
-    # SwiftUI, CoreData, and CloudKit are automatically linked by Xcode.
-    # No explicit framework entries needed.
 
 # ── Schemes ────────────────────────────────────────────────────────────────────
 schemes:

@@ -1,33 +1,27 @@
 // ShoppingRowView.swift
-// HouseholdApp
-//
-// A single row in the shopping list.
-
 import SwiftUI
 
 struct ShoppingRowView: View {
 
-    @Environment(\.managedObjectContext) private var ctx
-    @EnvironmentObject private var appSettings: AppSettings
+    @EnvironmentObject private var appSettings:   AppSettings
+    @EnvironmentObject private var shoppingStore: ShoppingStore
+    @EnvironmentObject private var householdCtrl: HouseholdController
 
-    @ObservedObject var item: ShoppingItem
-
+    let item: ShoppingItemDoc
     @State private var checkAnimating = false
+
+    private var householdId: String { householdCtrl.household?.id ?? "" }
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-
-            // ── Purchase checkbox ──────────────────────────────────────────────
             Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                    checkAnimating = true
-                }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { checkAnimating = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                     checkAnimating = false
                     if item.isPurchased {
-                        item.markUnpurchased(in: ctx)
+                        shoppingStore.markUnpurchased(item, householdId: householdId)
                     } else {
-                        item.markPurchased(in: ctx)
+                        shoppingStore.markPurchased(item, householdId: householdId)
                     }
                 }
             } label: {
@@ -38,44 +32,31 @@ struct ShoppingRowView: View {
             }
             .buttonStyle(.plain)
 
-            // ── Item info ──────────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(item.nameSafe)
                         .font(.body)
                         .strikethrough(item.isPurchased, color: .secondary)
                         .foregroundStyle(item.isPurchased ? .secondary : .primary)
-
                     if let qty = item.quantitySafe {
-                        Text(qty)
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
+                        Text(qty).font(.caption2.weight(.medium)).foregroundStyle(.white)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
                             .background(.blue.opacity(0.7), in: Capsule())
                     }
                 }
-
-                HStack(spacing: 6) {
-                    if let itemType = item.itemType, !itemType.isEmpty {
-                        Label(itemType, systemImage: appSettings.iconForItemType(itemType))
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.secondary.opacity(0.12), in: Capsule())
-                    }
+                if let t = item.itemType, !t.isEmpty {
+                    AppIconLabel(title: t, icon: appSettings.iconForItemType(t))
+                        .font(.caption2.weight(.medium)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.12), in: Capsule())
                 }
             }
 
             Spacer()
 
-            // ── Right side: store label + assignee ────────────────────────────
             VStack(alignment: .trailing, spacing: 4) {
                 if let store = item.store, !store.isEmpty {
-                    Text(store)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text(store).font(.caption).foregroundStyle(.secondary)
                 }
                 assigneeView
             }
@@ -84,30 +65,21 @@ struct ShoppingRowView: View {
         .opacity(item.isPurchased ? 0.6 : 1.0)
     }
 
-    // ── Assignee display ───────────────────────────────────────────────────────
-
     private var assigneeView: some View {
-        let indices = Array(item.assignedMemberIndices.sorted())
+        let indices = item.assignedToMembers.sorted()
         return Group {
             if indices.isEmpty {
-                Image(systemName: "person.2.fill")
-                    .font(.caption)
-                    .foregroundStyle(.purple)
+                Image(systemName: "person.2.fill").font(.caption).foregroundStyle(.purple)
             } else if indices.count == 1, let idx = indices.first {
-                Image(systemName: "person.fill")
-                    .font(.caption)
+                Image(systemName: "person.fill").font(.caption)
                     .foregroundStyle(appSettings.memberColor(at: idx))
             } else {
                 HStack(spacing: 3) {
                     ForEach(indices.prefix(3), id: \.self) { idx in
-                        Circle()
-                            .fill(appSettings.memberColor(at: idx))
-                            .frame(width: 7, height: 7)
+                        Circle().fill(appSettings.memberColor(at: idx)).frame(width: 7, height: 7)
                     }
                     if indices.count > 3 {
-                        Text("+\(indices.count - 3)")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.secondary)
+                        Text("+\(indices.count-3)").font(.system(size: 8)).foregroundStyle(.secondary)
                     }
                 }
             }
