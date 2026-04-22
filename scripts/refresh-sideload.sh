@@ -16,17 +16,15 @@ DERIVED_DATA_APP="$HOME/Library/Developer/Xcode/DerivedData/HouseholdApp-btmbjbn
 
 # ── Device UDIDs ──────────────────────────────────────────────────────────────
 JORDAN_IPHONE="00008101-000838881AE1001E"
-# WIFE_IPHONE=""   # Add after wireless-pairing her phone in Xcode
+WIFE_IPHONE="00008140-001A74A92678801C"
 
-DEVICES=("$JORDAN_IPHONE")
-# Uncomment once wife's phone is paired:
-# DEVICES=("$JORDAN_IPHONE" "$WIFE_IPHONE")
+DEVICES=("$JORDAN_IPHONE" "$WIFE_IPHONE")
 
 echo "▶ Building HouseholdApp for device..."
 xcodebuild \
   -project "$PROJECT_DIR/HouseholdApp.xcodeproj" \
   -scheme "$SCHEME" \
-  -destination "id=$JORDAN_IPHONE" \
+  -destination "generic/platform=iOS" \
   -configuration Debug \
   build 2>&1 | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)|Compiling|Linking"
 
@@ -35,7 +33,7 @@ for UDID in "${DEVICES[@]}"; do
   echo "  → $UDID"
   xcrun devicectl device install app \
     --device "$UDID" \
-    --bundle-path "$DERIVED_DATA_APP"
+    "$DERIVED_DATA_APP"
 done
 
 echo "✅ HouseholdApp refreshed on all devices!"
