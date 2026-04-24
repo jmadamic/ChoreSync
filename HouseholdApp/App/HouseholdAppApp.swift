@@ -46,6 +46,9 @@ struct HouseholdAppApp: App {
                                 shoppingStore.startListening(householdId: hid)
                             }
                         }
+                        .task {
+                            await NotificationManager.shared.requestPermissionIfNeeded()
+                        }
                         .onChange(of: householdCtrl.household?.id) { _, newId in
                             if let hid = newId {
                                 choreStore.startListening(householdId: hid)
