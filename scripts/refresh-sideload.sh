@@ -26,6 +26,7 @@ xcodebuild \
   -scheme "$SCHEME" \
   -destination "generic/platform=iOS" \
   -configuration Debug \
+  -allowProvisioningUpdates \
   build 2>&1 | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)|Compiling|Linking"
 
 echo "▶ Installing on devices..."
