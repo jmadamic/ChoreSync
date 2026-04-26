@@ -128,6 +128,38 @@ struct SettingsView: View {
                     .pickerStyle(.menu)
                 }
 
+                // ── Notifications ──────────────────────────────────────────────
+                Section {
+                    Toggle("Due Date Reminders", isOn: $appSettings.notifDueDatesEnabled)
+
+                    if appSettings.notifDueDatesEnabled {
+                        Picker("Remind me for", selection: $appSettings.notifChoreFilter) {
+                            ForEach(NotifChoreFilter.allCases) { filter in
+                                Text(filter.label).tag(filter)
+                            }
+                        }
+
+                        if appSettings.notifChoreFilter == .mine {
+                            Picker("I am", selection: $appSettings.myMemberIndex) {
+                                ForEach(Array(appSettings.members.indices), id: \.self) { i in
+                                    Text(appSettings.memberName(at: i)).tag(i)
+                                }
+                            }
+                        }
+
+                        Toggle("Day-of reminder (9am)", isOn: $appSettings.notifDayOf)
+                        Toggle("Day-before reminder (9am)", isOn: $appSettings.notifDayBefore)
+                    }
+                } header: {
+                    Text("Notifications")
+                } footer: {
+                    if appSettings.notifDueDatesEnabled && !appSettings.notifDayOf && !appSettings.notifDayBefore {
+                        Text("Enable at least one reminder type to receive notifications.")
+                    } else if !appSettings.notifDueDatesEnabled {
+                        Text("Receive a reminder at 9am when a chore is due.")
+                    }
+                }
+
                 // ── About ──────────────────────────────────────────────────────
                 Section("About") {
                     LabeledContent("Version") {
@@ -137,6 +169,9 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .onChange(of: appSettings.notifSettingsHash) { _, _ in
+                NotificationManager.shared.rescheduleAll(choreStore.chores)
+            }
             .alert("Delete All Data?", isPresented: $showingDeleteAlert) {
                 Button("Delete Everything", role: .destructive, action: deleteAll)
                 Button("Cancel", role: .cancel) {}

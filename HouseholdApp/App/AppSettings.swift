@@ -10,6 +10,24 @@
 import SwiftUI
 import Combine
 
+// ── Notification preferences ─────────────────────────────────────────────────
+
+enum NotifChoreFilter: String, CaseIterable, Identifiable {
+    case all    = "all"
+    case mine   = "mine"
+    case shared = "shared"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .all:    return "All chores"
+        case .mine:   return "My chores"
+        case .shared: return "Shared (everyone)"
+        }
+    }
+}
+
 // ── Appearance ───────────────────────────────────────────────────────────────
 
 enum AppAppearance: String, CaseIterable, Identifiable {
@@ -37,6 +55,50 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 }
 
 class AppSettings: ObservableObject {
+
+    // ── Notification preferences ─────────────────────────────────────────────
+    // All stored in UserDefaults (device-local) so each phone configures independently.
+
+    @AppStorage("notifDueDatesEnabled")
+    var notifDueDatesEnabled: Bool = true {
+        willSet { objectWillChange.send() }
+    }
+
+    @AppStorage("notifChoreFilter")
+    private var notifChoreFilterRaw: String = NotifChoreFilter.all.rawValue {
+        willSet { objectWillChange.send() }
+    }
+    var notifChoreFilter: NotifChoreFilter {
+        get { NotifChoreFilter(rawValue: notifChoreFilterRaw) ?? .all }
+        set { notifChoreFilterRaw = newValue.rawValue }
+    }
+
+    /// Which member index "I" am — used when notifChoreFilter == .mine.
+    @AppStorage("myMemberIndex")
+    var myMemberIndex: Int = 0 {
+        willSet { objectWillChange.send() }
+    }
+
+    @AppStorage("notifDayOf")
+    var notifDayOf: Bool = true {
+        willSet { objectWillChange.send() }
+    }
+
+    @AppStorage("notifDayBefore")
+    var notifDayBefore: Bool = true {
+        willSet { objectWillChange.send() }
+    }
+
+    /// A hash of all notification preferences; observe this to reschedule when any pref changes.
+    var notifSettingsHash: Int {
+        var h = Hasher()
+        h.combine(notifDueDatesEnabled)
+        h.combine(notifChoreFilterRaw)
+        h.combine(myMemberIndex)
+        h.combine(notifDayOf)
+        h.combine(notifDayBefore)
+        return h.finalize()
+    }
 
     // ── Appearance ───────────────────────────────────────────────────────────
     @AppStorage("appearanceMode")

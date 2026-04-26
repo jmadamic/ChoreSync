@@ -61,30 +61,71 @@ final class NotificationManager {
         (0..<2).map { "\(idPrefix)\(choreId)-\($0)" }
     }
 
+    // MARK: - UserDefaults preference readers (device-local, same keys as AppSettings @AppStorage)
+
+    private var prefDueDatesEnabled: Bool {
+        UserDefaults.standard.object(forKey: "notifDueDatesEnabled") as? Bool ?? true
+    }
+    private var prefChoreFilter: NotifChoreFilter {
+        let raw = UserDefaults.standard.string(forKey: "notifChoreFilter") ?? "all"
+        return NotifChoreFilter(rawValue: raw) ?? .all
+    }
+    private var prefMyMemberIndex: Int {
+        UserDefaults.standard.integer(forKey: "myMemberIndex")
+    }
+    private var prefDayOf: Bool {
+        UserDefaults.standard.object(forKey: "notifDayOf") as? Bool ?? true
+    }
+    private var prefDayBefore: Bool {
+        UserDefaults.standard.object(forKey: "notifDayBefore") as? Bool ?? true
+    }
+
     private func addRequests(for chore: ChoreDoc) {
+        // ── Respect user preferences ──────────────────────────────────────────
+        guard prefDueDatesEnabled else { return }
+
+        switch prefChoreFilter {
+        case .mine:
+            // Skip chores assigned to specific people that don't include me
+            if !chore.assignedToMembers.isEmpty && !chore.assignedToMembers.contains(prefMyMemberIndex) {
+                return
+            }
+        case .shared:
+            // Skip chores that are assigned to specific people (not "everyone")
+            if !chore.assignedToMembers.isEmpty { return }
+        case .all:
+            break
+        }
+
+        let wantDayOf     = prefDayOf
+        let wantDayBefore = prefDayBefore
+        guard wantDayOf || wantDayBefore else { return }
+
+        // ── Build fire-date entries ────────────────────────────────────────────
         let cal = Calendar.current
         let now  = Date()
 
-        // Build (fireDate, body, index) tuples based on due-date type
         var entries: [(date: Date, body: String, idx: Int)] = []
 
         switch chore.dueDateTypeEnum {
 
         case .specificDate:
             guard let due = chore.dueDate else { return }
-            // 9am on the due date
-            if let dayOf = cal.date(bySettingHour: 9, minute: 0, second: 0, of: due), dayOf > now {
+            if wantDayOf,
+               let dayOf = cal.date(bySettingHour: 9, minute: 0, second: 0, of: due),
+               dayOf > now {
                 entries.append((dayOf, "Due today", 0))
             }
-            // 9am the day before
-            if let prev = cal.date(byAdding: .day, value: -1, to: due),
+            if wantDayBefore,
+               let prev = cal.date(byAdding: .day, value: -1, to: due),
                let eve  = cal.date(bySettingHour: 9, minute: 0, second: 0, of: prev),
                eve > now {
                 entries.append((eve, "Due tomorrow", 1))
             }
 
         case .week:
-            guard let due   = chore.dueDate,
+            guard wantDayOf,
+                  let due   = chore.dueDate,
                   let start = cal.dateInterval(of: .weekOfYear, for: due)?.start,
                   let fire  = cal.date(bySettingHour: 9, minute: 0, second: 0, of: start),
                   fire > now
@@ -92,7 +133,8 @@ final class NotificationManager {
             entries.append((fire, "Due this week", 0))
 
         case .month:
-            guard let due   = chore.dueDate,
+            guard wantDayOf,
+                  let due   = chore.dueDate,
                   let start = cal.dateInterval(of: .month, for: due)?.start,
                   let fire  = cal.date(bySettingHour: 9, minute: 0, second: 0, of: start),
                   fire > now
