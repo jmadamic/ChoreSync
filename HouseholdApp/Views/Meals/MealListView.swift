@@ -11,6 +11,7 @@ struct MealListView: View {
     @State private var filterIndex     = -2   // -2=All, 0+=member
     @State private var showingAddMeal  = false
     @State private var showingSavedMeals = false
+    @State private var showingImport = false
     @State private var mealToEdit: MealDoc? = nil
     @State private var showDeleteAlert = false
     @State private var mealToDelete: MealDoc? = nil
@@ -124,6 +125,12 @@ struct MealListView: View {
                     }
                     .accessibilityLabel("My Meals library")
                 }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button { showingImport = true } label: {
+                        Image(systemName: "tablecells").font(.title3)
+                    }
+                    .accessibilityLabel("Plan from spreadsheet")
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showingAddMeal = true } label: {
                         Image(systemName: "plus.circle.fill").font(.title2)
@@ -133,6 +140,7 @@ struct MealListView: View {
             }
             .sheet(isPresented: $showingAddMeal) { MealFormView(meal: nil) }
             .sheet(isPresented: $showingSavedMeals) { SavedMealsView() }
+            .sheet(isPresented: $showingImport)     { MealPlanImportView() }
             .sheet(item: $mealToEdit)            { MealFormView(meal: $0) }
             .alert("Delete Meal?", isPresented: $showDeleteAlert, presenting: mealToDelete) { meal in
                 Button("Delete", role: .destructive) {

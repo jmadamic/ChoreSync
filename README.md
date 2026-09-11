@@ -22,6 +22,7 @@ Data lives in **Cloud Firestore** and syncs in real time between everyone in the
 | **My Meals library** | Save any meal for repeated use, then plan it again with one tap (prefills ingredients, recipe, instructions). Share a meal — full details as text — via the standard share sheet |
 | **Garden** | Track what you're growing with multiple harvests per plant, each with its own date and amount ("2 zucchinis", "some raspberries") — or mark herbs as "always ready" to pick as needed. Shopping-list items matching a crop that's ready (or close) show a "Growing" hint with the expected amount so you can hold off buying, and the add-item form has a "See what's ready soon" browser listing everything ripening in the next two weeks. Gardening chores appear in both the Chores tab and the Garden tab |
 | **Looking For** | A collaborative wishlist for things you're researching (a new bed, a dishwasher). Track must-haves vs nice-to-haves, dated research notes attributed to whoever wrote them (you can edit your own), and links. When you decide, "Add to Shopping List" prefills a shopping item from what you've gathered |
+| **Plan from a spreadsheet** | Meals tab → table icon. Share the bundled Excel/Google Sheets template, fill in meals (plus optional Trips and Packing sheets), import the .xlsx back. Preview shows exactly what will be created; rows with problems are listed by sheet and row number and simply left out. Creates meals, shopping items for "to buy" ingredients, missing trips, and packing items. Re-importing the same file is safe — existing items are skipped |
 | **Voice entry** | Tap the mic on Chores or Shopping and say what you need — *"add task due tomorrow to clean the bathroom"*. Speech is transcribed on-device, parsed for the date, time, and assignee, then prefills the normal form for you to confirm |
 | **Local notifications** | Due-date reminders for chores and need-by reminders for shopping items at 9 am — or at the item's own time when one is set (day-of and/or day-before), filterable to my/shared/all in Settings |
 | **Auto-cleanup** | Completed chores, purchased items, past meals, ended trips, and harvested plants are deleted automatically after 1 week |
@@ -72,6 +73,8 @@ HouseholdApp/
     │   └── MemberAssignment.swift      ← Everyone / member-index assignment helper + colours
     │
     ├── Utilities/
+    │   ├── XLSXReader.swift            ← Dependency-free .xlsx reader (zip + Compression + XMLParser)
+    │   ├── MealPlanImporter.swift      ← Spreadsheet rows → meals/shopping/trips/packing plan with row-level issues
     │   ├── SpeechCapture.swift         ← On-device speech-to-text (SFSpeechRecognizer)
     │   ├── VoiceIntentParser.swift     ← Turns a transcript into a draft chore / shopping item
     │   ├── Color+Hex.swift             ← Color ↔ "#RRGGBB" hex string conversion
@@ -87,6 +90,8 @@ HouseholdApp/
         ├── Garden/                     ← Growing plants with ready dates, garden chores
         ├── Wishes/                     ← "Looking For" list: criteria, dated notes, links
         ├── Voice/                      ← Mic capture + confirm screen for spoken entry
+    ├── Resources/
+    │   └── MealPlanTemplate.xlsx       ← Spreadsheet template (regenerate with scripts/make-meal-template.py)
         ├── Packing/                    ← Trip list, trip form, trip detail (sections, linked meals/chores)
         ├── Meals/                      ← Meal list, rows, add/edit sheet, My Meals library (saved meals)
         └── Settings/                   ← Members, invite code, notifications, data summary
@@ -270,3 +275,24 @@ The source of truth is `project.yml` — never edit `project.pbxproj` by hand.
 | Minimum OS | iOS 17 |
 | Language | Swift 5.9 |
 | Project generation | xcodegen |
+
+## Planning meals from a spreadsheet
+
+Some people would rather plan a week (or a trip) in a spreadsheet than tap through a phone form. The Meals tab has a table icon that:
+
+1. **Shares the template** (`MealPlanTemplate.xlsx`, also in this repo under `HouseholdApp/Resources/`). Open it in Excel, Google Sheets, or Numbers.
+2. **Imports the filled-in file** — save as `.xlsx` (Google Sheets: *File › Download › Microsoft Excel*), pick it in the app.
+
+**Sheets:** `Meals` (required — one row per meal), `Trips` and `Packing` (optional). Orange headers are required, blue are optional; hover a header for details, and the `Instructions` sheet has examples.
+
+| Sheet | Required | Optional |
+|---|---|---|
+| Meals | Date, Meal (dropdown) | Meal Name, Cook, Ingredients (have), Ingredients to Buy, Trip Name, Recipe Link, Instructions, Notes |
+| Trips | Trip Name, Start Date, End Date | Notes |
+| Packing | Trip Name, Item | Section (dropdown) |
+
+**What gets created:** each row → a meal; each "Ingredients to Buy" entry → a shopping item linked to the meal; a Trip Name that doesn't exist → a new trip (dated from the Trips sheet, or spanning its meals' dates); meals on a trip put all their ingredients on the packing list under Food; Packing rows → packing items.
+
+**Error-proofing:** headers, sheet names, and the Instructions sheet are locked in the template; dropdowns and date validation guard the cells. On import, headers are matched case-insensitively with aliases, dates are accepted in most typed forms, blank rows are ignored, and every problem row is reported with its sheet and row number while the rest still import. Meals, items, and trips that already exist are skipped.
+
+Regenerate the template after changing columns with `python3 scripts/make-meal-template.py` (needs `openpyxl`), and keep `MealPlanImporter.swift`'s aliases in sync.
