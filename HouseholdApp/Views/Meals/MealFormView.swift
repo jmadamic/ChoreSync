@@ -29,12 +29,12 @@ struct MealFormView: View {
     @State private var recipeURL       = ""
     @State private var instructions    = ""
     @State private var savedToLibrary  = false
-    @State private var showMissingPrompt = false
 
     private var householdId: String { householdCtrl.household?.id ?? "" }
 
-    /// Ingredients marked "don't have" that aren't on the grocery list yet.
-    private var missingUnadded: [MealIngredient] {
+    /// Ingredients marked "need to buy" that aren't on the shopping list yet —
+    /// these become shopping items when the meal is saved.
+    private var pendingToBuy: [MealIngredient] {
         ingredients.filter { !$0.have && !$0.addedToList }
     }
 
@@ -151,17 +151,6 @@ struct MealFormView: View {
                 }
             }
             .onAppear(perform: populate)
-            .alert("Missing Ingredients", isPresented: $showMissingPrompt) {
-                Button("Add to Grocery List") {
-                    addAllMissingToGroceryList()
-                    save()
-                }
-                Button("Save Without Adding") { save() }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                let names = missingUnadded.map(\.name).joined(separator: ", ")
-                Text("You don't have: \(names). Add to the grocery list? Items link back to this meal.")
-            }
         }
     }
 
@@ -187,49 +176,46 @@ struct MealFormView: View {
         } header: {
             Text("Ingredients")
         } footer: {
-            if !ingredients.isEmpty {
-                Text("Tap the circle to mark whether you have an ingredient. Missing ones can be added to the grocery list.")
+            if ingredients.isEmpty {
+                Text("Add what the meal needs, then tap the cart on anything you have to buy.")
+            } else if pendingToBuy.isEmpty {
+                Text("Tap the cart on an ingredient to add it to the shopping list when you save.")
+            } else {
+                Text("\(pendingToBuy.count) ingredient\(pendingToBuy.count == 1 ? "" : "s") will be added to the shopping list when you save, linked to this meal.")
             }
         }
     }
 
     private func ingredientRow(_ ing: Binding<MealIngredient>) -> some View {
-        HStack(spacing: 10) {
-            Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                ing.wrappedValue.have.toggle()
-            } label: {
-                Image(systemName: ing.wrappedValue.have ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(ing.wrappedValue.have ? .green : .orange)
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(ing.wrappedValue.have
-                ? "\(ing.wrappedValue.name): on hand. Tap to mark as needed."
-                : "\(ing.wrappedValue.name): needed. Tap to mark as on hand.")
-
+        let needs = !ing.wrappedValue.have
+        let onList = ing.wrappedValue.addedToList
+        return HStack(spacing: 10) {
             TextField("Ingredient", text: ing.name)
 
             Spacer()
 
-            if !ing.wrappedValue.have {
-                if ing.wrappedValue.addedToList {
-                    Label("On list", systemImage: "cart.fill")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .labelStyle(.titleAndIcon)
-                } else {
-                    Button {
-                        addToGroceryList(ing)
-                    } label: {
-                        Label("Add to list", systemImage: "cart.badge.plus")
-                            .font(.caption.weight(.medium))
+            if onList {
+                // Already a shopping item from an earlier save — just show it.
+                Label("On list", systemImage: "cart.fill")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .labelStyle(.titleAndIcon)
+            } else {
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    ing.wrappedValue.have.toggle()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: needs ? "cart.fill.badge.plus" : "cart.badge.plus")
+                        if needs { Text("Buy").font(.caption.weight(.semibold)) }
                     }
-                    .buttonStyle(.borderless)
-                    .tint(.orange)
-                    .accessibilityLabel("Add \(ing.wrappedValue.name) to grocery list")
+                    .foregroundStyle(needs ? .orange : .secondary)
+                    .frame(minWidth: 44, minHeight: 32)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(needs
+                    ? "\(ing.wrappedValue.name): will be added to the shopping list. Tap to mark as on hand."
+                    : "\(ing.wrappedValue.name): on hand. Tap to add to the shopping list.")
             }
         }
     }
@@ -241,22 +227,11 @@ struct MealFormView: View {
         newIngredient = ""
     }
 
-    /// Creates a grocery item for one ingredient, linked back to this meal.
-    private func addToGroceryList(_ ing: Binding<MealIngredient>) {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        let item = ShoppingItemDoc(
-            id: UUID().uuidString,
-            name: ing.wrappedValue.name.trimmingCharacters(in: .whitespaces),
-            quantity: nil, store: nil, itemType: "Food",
-            assignedToMembers: [], isPurchased: false, purchasedAt: nil,
-            notes: nil, sortOrder: 0, createdAt: Date(),
-            mealId: mealId, mealName: displayTitle
-        )
-        shoppingStore.save(item, householdId: householdId)
-        ing.wrappedValue.addedToList = true
-    }
-
-    private func addAllMissingToGroceryList() {
+    /// Builds shopping items for every ingredient marked "need to buy" that
+    /// isn't on the list yet, and flags them so the meal remembers.
+    /// Called at save time only — nothing is written while still editing,
+    /// so cancelling the form never leaves orphaned shopping items.
+    private func createShoppingItems(for ingredients: inout [MealIngredient]) {
         for idx in ingredients.indices where !ingredients[idx].have && !ingredients[idx].addedToList {
             let item = ShoppingItemDoc(
                 id: UUID().uuidString,
@@ -356,16 +331,10 @@ struct MealFormView: View {
         savedToLibrary = true
     }
 
-    /// Save button: if ingredients are missing and not yet on the grocery
-    /// list, prompt first; otherwise save straight away.
     private func saveTapped() {
         // Capture any text sitting in the "add ingredient" field.
         addIngredient()
-        if missingUnadded.isEmpty {
-            save()
-        } else {
-            showMissingPrompt = true
-        }
+        save()
     }
 
     private func save() {
@@ -379,7 +348,9 @@ struct MealFormView: View {
         target.day               = Calendar.current.startOfDay(for: day)
         target.mealTypeEnum      = mealType
         target.assignedToMembers = selectedMembers.sorted()
-        target.ingredients       = ingredients.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+        var kept = ingredients.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+        createShoppingItems(for: &kept)
+        target.ingredients       = kept
         target.notes             = notes.isEmpty ? nil : notes
         target.tripId            = tripId
         target.recipeURL         = recipeURL.isEmpty ? nil : recipeURL

@@ -33,6 +33,11 @@ targets:
       - path: HouseholdApp
         excludes:
           - "**/*.entitlements"
+          - "Resources/**"
+      # Bundled data files, copied not compiled (meal-plan spreadsheet template;
+      # regenerate with scripts/make-meal-template.py)
+      - path: HouseholdApp/Resources
+        buildPhase: resources
 
     # ── Resources ──────────────────────────────────────────────────────────────
     resources:
